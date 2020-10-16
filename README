@@ -1,0 +1,9 @@
+Inverted Index: (Metadata, (Doc_ID, freq, pos1...))
+Intermediate II: (Term_ID, Doc_ID, freq, pos1,...)
+Lexicon struture: start of index, term stats
+Page/URL Table: URL,size,Doc_ID
+
+Memory: Term --> TermID
+
+
+(TERM_ID,Doc_ID,)

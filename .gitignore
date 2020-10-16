@@ -1,0 +1,6 @@
+ps2.pdf
+.vscode
+tmp/*
+output/*
+debug/*
+build/*
