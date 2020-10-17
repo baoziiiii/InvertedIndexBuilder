@@ -5,7 +5,7 @@
 typedef struct
 {
    char key_string[WORD_LENGTH_MAX+1];
-   int offset;
+   long offset;
 } lexicon_el;
 
 bool init_query_database();

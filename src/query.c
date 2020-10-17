@@ -30,7 +30,7 @@ int doc_table_L = 0;
 
 bool read_doc_file(struct hashmap* query_map){
     FILE* f_doc = fopen("output/doc_table","r");
-    file_buffer* fb = init_dynamic_buffer(1000000);
+    file_buffer* fb = init_dynamic_buffer(100000000);
     fb -> f = f_doc;
 
     if(f_doc == NULL)
@@ -68,8 +68,14 @@ bool init_query_database(){
 }
 
 
+bool _free_lex(const void * value, void * x){
+   free((lexicon_el*)value);
+   return true;
+}
+
 void close_query_database(){
     free_doc_table();
+    hashmap_scan(query_map, &_free_lex, NULL);
     hashmap_free(query_map);
 }
 

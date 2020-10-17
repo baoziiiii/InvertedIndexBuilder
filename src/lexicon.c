@@ -41,6 +41,8 @@ bool read_next_term(file_buffer *fb, lexicon_el* ll){
 }
 
 
+
+
 bool read_lexicon_file(struct hashmap* query_map){
     FILE* f_lex = fopen("output/lexicon","r");
     file_buffer* fb = init_dynamic_buffer(DYNAMIC_BUFFER);
@@ -63,6 +65,9 @@ bool read_lexicon_file(struct hashmap* query_map){
     fclose(f_lex);
     return true;
 }
+
+
+
 
 void write_lexicon_file(FILE* f_lex, lexicon* lex){
 
