@@ -21,7 +21,7 @@ heapStruct heap;         /* heap structure */
 int recSize;             /* size of record (in bytes) */
 int recNum;              /* # of records that fit in each buffer */ 
 
-int merge(char N_input, int _maxDegree)
+int merge(char N_input, int _maxDegree, long memory_limit)
 {
     int maxDegree, degree;   /* max allowed merge degree, and actual degree */
     int numFiles = 0;        /* # of output files that are generated */
@@ -32,6 +32,7 @@ int merge(char N_input, int _maxDegree)
     void writeRecord();
     int nextRecord();
     int i;
+    
 
     recSize = sizeof(term_entry*);
     recNum = REC_BUFFER_SIZE;
@@ -44,7 +45,7 @@ int merge(char N_input, int _maxDegree)
         for (degree = 0; degree < maxDegree && degree < N_input; degree++)
         {
             snprintf(filename, sizeof(filename), "%s-%d", "tmp/sorted", degree);
-            file_buffer* fb_in = init_dynamic_buffer(INPUT_BUFFER);
+            file_buffer* fb_in = init_dynamic_buffer(memory_limit/N_input);
             fb_in -> f = fopen(filename, "r");
             ioBufs[degree].fb = fb_in;
         }
@@ -52,7 +53,7 @@ int merge(char N_input, int _maxDegree)
 
         /* open output file (output is handled by the buffer ioBufs[degree]) */
         sprintf(filename, "%s-%d", "tmp/merged", numFiles);
-        file_buffer* fb_o = init_dynamic_buffer(OUTPUT_BUFFER);
+        file_buffer* fb_o = init_dynamic_buffer((memory_limit/N_input)*2);
         fb_o -> f = fopen(filename, "w");
         ioBufs[degree].fb = fb_o;
 
@@ -145,8 +146,7 @@ int nextRecord(int i){
 
 /* copy i-th record from heap cache to out buffer; write to disk if full */
 /* If i==-1, then out buffer is just flushed to disk (must be last call) */
-void writeRecord(buffer *b, int i)
-{
+void writeRecord(buffer *b, int i){
     int j;
     if( i != -1 && b->curRec >= 1 && b->buf[b->curRec - 1]->term_id == heap.cache[i]->term_id){
         merge_same_term(b->buf[b->curRec - 1], heap.cache[i]);
@@ -167,6 +167,5 @@ void writeRecord(buffer *b, int i)
 
     if (i != -1){
         b->buf[(b->curRec++)] = heap.cache[i];
-            // memcpy(&(b->buf[(b->curRec++)*recSize]), heap.cache+i*recSize, recSize);
     }
 }

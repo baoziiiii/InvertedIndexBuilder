@@ -5,30 +5,23 @@
 #include <stdio.h>
 #include <stdlib.h>
 
+
 /*  doc model */
 typedef struct DE{
-    int doc_id; //
-    int length;
+    int doc_id; 
+    int size_of_doc;
     char* URL;
 }doc_entry;
 
 /* See lexicon.h for lexicon model */
 
 /*  posting model  */
-//  TE(term_id) -> TC(doc_id) -> PN(position)
-
-// Position Node 
-typedef struct PN{
-    int position; // term position in the doc
-    struct PN* next; // next position node
-}position_node;
+//  TE(term_id) -> TC(doc_id)
 
 // Term Entry Chunk, by doc_id
 typedef struct TC{
     int doc_id; // doc id
     int freq;   // freq(length of PN list)
-    position_node* head; // PN list head
-    position_node* tail;
     struct TC* next; // next TC Node
 }term_chunk;
 
@@ -51,18 +44,24 @@ typedef struct{
     int max;
 }file_buffer;
 
+// global general buffer setting
 #define INPUT_BUFFER 100000000
 #define OUTPUT_BUFFER 100000000
 
+
+/* Implemented in model_support.c */
+
 /*  model operations  */
 bool merge_same_term(term_entry* dst, term_entry*src);
-void print_term_entry(term_entry* te);
+void print_term_entry(doc_entry** doc_table ,term_entry* te);
 bool _free_te(term_entry* te);
 
 /*  model output  */
-void write_doc_table(doc_entry *de);
+bool write_doc_table(file_buffer* fb, doc_entry* de, bool flush);
+bool next_doc(file_buffer* fb,  doc_entry* de);
+void write_doc_table_end(file_buffer* fb, int total);
 void read_inverted_list(FILE* f, int offset, int length, term_entry* te);
-int write_to_final_inverted_list(file_buffer* fb, term_entry*te, bool flush);
+long write_to_final_inverted_list(file_buffer* fb, term_entry*te, bool flush);
 
 /*  Operate the term model by dynamic buffer  */
 file_buffer* init_dynamic_buffer(int size);
@@ -70,7 +69,6 @@ void free_file_buffer(file_buffer* fb);
 bool next_record_from_file_buffer(file_buffer* fb, term_entry* te);
 bool write_record(file_buffer* fb, term_entry* te, bool flush);
 void flush_buffer_to_file(file_buffer* fb);
-
 
 
 #endif

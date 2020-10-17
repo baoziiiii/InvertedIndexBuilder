@@ -5,6 +5,7 @@
 #include "sort_phase.h"
 #include "merge_phase.h"
 #include "termid.h"
+#include "sysop.h"
 
 int check_number_of_files(char* prefix){
    char filename[1024];
@@ -20,23 +21,8 @@ int check_number_of_files(char* prefix){
    return -1;
 }
 
-int remove_files(char* prefix){
-   char filename[1024];
-   int i = 0;
-   while( i < 10000 ){
-      snprintf(filename, sizeof(filename), "%s-%d", prefix, i);
-      FILE* f = fopen(filename,"r");
-      if( f == NULL )
-         return  i == 0 ? -1:i;
-      fclose(f);
-      remove(filename);
-      i ++;
-   }
-   return -1;
-}
-
 // sort each file and one pass merge
-int merge_sort(){
+int merge_sort(long memory_limit){
    char s1[] = "tmp/intermediate";
    char s2[] = "tmp/sorted";
    int r = -1;
@@ -50,21 +36,20 @@ int merge_sort(){
    printf("Sorting...\n");
    r = check_number_of_files(s1);
    if( r == -1 ){
-      printf("No file found for: %s", s1);
+      printf("No file found for: %s\n", s1);
       exit(EXIT_FAILURE);
    }
    sort(r);
-   remove_files(s1);
-
+   // remove_files(s1);
 
    printf("Merging sorted files...\n");
    r = check_number_of_files(s2);
    if( r == -1 ){
-      printf("No file found for: %s", s2);
+      printf("No file found for: %s\n", s2);
       exit(EXIT_FAILURE);
    }
 
-   merge(r, r);
+   merge(r, r, memory_limit);
    rename("tmp/merged-0","tmp/merged");
    remove_files(s2);
 

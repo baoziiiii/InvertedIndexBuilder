@@ -5,6 +5,7 @@
 #include <string.h>
 #include "model.h"
 #include "merge_sort.h"
+#include "var_bytes.h"
 
 /*  Dynamic Buffer  */
 file_buffer* init_dynamic_buffer(int size){
@@ -13,6 +14,7 @@ file_buffer* init_dynamic_buffer(int size){
     fb->curr = 0;
     fb->max = 0;
     fb->buffer = (char*)malloc(fb->size);
+    memset(fb->buffer,0, fb->size);
     return fb;
 }
 
@@ -54,14 +56,14 @@ bool next_record_from_file_buffer(file_buffer* fb, term_entry* te){
 
     te->tc_length = doc_len;
 
+
     for(int i = 0; i < doc_len; i++){
         int doc_id = 0;
         memcpy(&doc_id, fb->buffer + fb->curr, sizeof(int));
         fb->curr += sizeof(int);
-
         term_chunk* tc = (term_chunk*)malloc(sizeof(term_chunk));
-        tc->doc_id = doc_id;
         tc->next = NULL;
+        tc->doc_id = doc_id;
 
         if( i == 0){
             te->chunk_list_head = tc;
@@ -77,25 +79,8 @@ bool next_record_from_file_buffer(file_buffer* fb, term_entry* te){
         fb->curr += sizeof(int);
 
         tc->freq = freq;
-
-        for(int j = 0; j < freq; j++){
-            int position = -1;
-            memcpy(&position, fb->buffer + fb->curr , sizeof(int));
-            fb->curr += sizeof(int);
-
-            position_node* pn = (position_node*)malloc(sizeof(position_node));
-            pn->position = position;
-            pn->next = NULL;
-
-            if( j == 0){
-                tc->head = pn;
-                tc->tail = pn;
-            }else{
-                tc->tail->next = pn;
-                tc->tail = pn;
-            }
-        }
     }
+
     return true;
 }
 
@@ -133,13 +118,6 @@ bool write_record(file_buffer* fb, term_entry* te, bool flush){
         memcpy(fb -> buffer + fb->curr , &ptr->freq ,sizeof(int) );
         fb->curr  += sizeof(int);
 
-        position_node* pos_ptr = ptr->head;
-
-        while(pos_ptr){
-            memcpy(fb -> buffer + fb->curr , &pos_ptr->position ,sizeof(int));
-            fb->curr  += sizeof(int);
-            pos_ptr = pos_ptr->next;
-        }
         ptr = ptr->next;
     }
 
@@ -147,7 +125,7 @@ bool write_record(file_buffer* fb, term_entry* te, bool flush){
 }
 
 
-int write_to_final_inverted_list(file_buffer* fb, term_entry*te, bool flush){
+long write_to_final_inverted_list(file_buffer* fb, term_entry* te, bool flush){
     static int offset = 0;
     if(flush == true){
         flush_buffer_to_file(fb);
@@ -156,52 +134,69 @@ int write_to_final_inverted_list(file_buffer* fb, term_entry*te, bool flush){
     if( te == NULL )
         return -1;
 
-    int l = te->total_size - sizeof(te->term_id) - sizeof(te->total_size);
-    if ( l + fb->curr  >= fb -> size )
+    unsigned char* vb_bytes = NULL;
+    int L = 0;
+
+    int estimated_max_len = (te->total_size - sizeof(te->term_id) - sizeof(te->total_size))*2;
+    if ( fb->curr + estimated_max_len  >= fb -> size )
         flush_buffer_to_file(fb);
     
-    memcpy(fb -> buffer + fb->curr , &te->tc_length,sizeof(int) );
-    fb->curr  += sizeof(int);
+    int actual_len = 0;
+
+    vb_bytes = vb_encode(te->tc_length, &L);
+    memcpy(fb -> buffer + fb->curr , vb_bytes , L);
+    free(vb_bytes);
+
+    fb->curr  += L;
+    actual_len += L;
+
     term_chunk* ptr = te->chunk_list_head;
+    int prev_doc_id = 0;
 
     while(ptr){
-        memcpy(fb -> buffer + fb->curr , &ptr->doc_id ,sizeof(int) );
-        fb->curr  += sizeof(int);
-        memcpy(fb -> buffer + fb->curr , &ptr->freq ,sizeof(int) );
-        fb->curr  += sizeof(int);
-        position_node* pos_ptr = ptr->head;
 
-        while(pos_ptr){
-            memcpy(fb -> buffer + fb->curr , &pos_ptr->position ,sizeof(int));
-            fb->curr  += sizeof(int);
-            pos_ptr = pos_ptr->next;
-        }
+        int diff_doc_id = ptr->doc_id - prev_doc_id;
+        prev_doc_id = ptr->doc_id;
+        vb_bytes = vb_encode(diff_doc_id, &L);
+        memcpy(fb -> buffer + fb->curr , vb_bytes, L );
+        free(vb_bytes);
+        fb->curr  += L;
+        actual_len += L;
+
+        vb_bytes = vb_encode(ptr->freq, &L);
+        memcpy(fb -> buffer + fb->curr , vb_bytes , L );
+        free(vb_bytes);
+
+        fb->curr  += L;
+        actual_len += L;
+
         ptr = ptr->next;
     }
-    offset += l;
+    offset += actual_len;
     
-    return offset - l;
-
+    return offset - actual_len;
 }
 
-
+// go to the offset of inverted list and read the record
 void read_inverted_list(FILE* f, int offset, int length, term_entry* te){
-    int doc_len = 0;
-    int freq = 0;
-    int position = -1;
 
     fseek(f, offset, SEEK_SET);
-
-    fread(&doc_len, sizeof(int), 1, f);
+    
+    int doc_len = vb_decode_stream(f);
+    // fread(&doc_len, sizeof(int), 1, f);
 
     te->tc_length = doc_len;
-
+    
+    int doc_id = 0;
     for( int i = 0;i < doc_len; i++){
 
         term_chunk* tc = (term_chunk*)malloc(sizeof(term_chunk));
-        fread(&tc->doc_id, sizeof(int), 1, f);
         tc->next = NULL;
 
+        doc_id = doc_id + vb_decode_stream(f);
+        tc->doc_id = doc_id;
+        // fread(&tc->doc_id, sizeof(int), 1, f);
+        
         if( i == 0){
             te->chunk_list_head = tc;
             te->chunk_list_tail = tc;
@@ -209,25 +204,8 @@ void read_inverted_list(FILE* f, int offset, int length, term_entry* te){
             te->chunk_list_tail->next = tc;
             te->chunk_list_tail = tc;
         }
-
-        fread(&freq, sizeof(int), 1, f);
-        tc->freq = freq;
-
-        for(int j = 0; j < freq; j++){
-            fread(&position, sizeof(int), 1, f);
-
-            position_node* pn = (position_node*)malloc(sizeof(position_node));
-            pn->position = position;
-            pn->next = NULL;
-
-            if( j == 0){
-                tc->head = pn;
-                tc->tail = pn;
-            }else{
-                tc->tail->next = pn;
-                tc->tail = pn;
-            }
-        }
+        // fread(&freq, sizeof(int), 1, f);
+        tc->freq = vb_decode_stream(f);
     }
 }
 
@@ -242,21 +220,6 @@ bool merge_same_term(term_entry* dst, term_entry* src){
         tc->freq = src_tc->freq;
         tc->doc_id = src_tc->doc_id;
         tc->next = NULL;
-
-        position_node* src_pn = src_tc->head;
-        for(int j = 0; j < tc->freq; j++){
-            position_node* pn = (position_node*)malloc(sizeof(position_node));
-            pn -> position = src_pn -> position;
-            pn -> next = NULL;
-            if( j == 0){
-                tc -> head = pn;
-                tc -> tail = pn;
-            }else{
-                tc -> tail -> next = pn;
-                tc -> tail = pn;
-            }
-            src_pn = src_pn -> next;
-        }
         
         dst->chunk_list_tail->next = tc;
         dst->chunk_list_tail = tc;
@@ -268,25 +231,90 @@ bool merge_same_term(term_entry* dst, term_entry* src){
 }
 
 
-void write_doc_table(doc_entry *de){
-   // printf("%s\n",de->URL);
-   int fd = open("output/doc_table.txt", O_CREAT|O_RDWR|O_APPEND,S_IWUSR|S_IRUSR);
-   dprintf(fd,"[%d]\t\t%d\n\t%s\n",de->doc_id,de->length, de->URL);
-   close(fd);
+// void write_doc_table(doc_entry *de){
+//    // printf("%s\n",de->URL);
+//    int fd = open("output/doc_table.txt", O_CREAT|O_RDWR|O_APPEND,S_IWUSR|S_IRUSR);
+//    dprintf(fd,"[%d]\t\t%d\n\t%s\n",de->doc_id,de->length, de->URL);
+//    close(fd);
+// }
+
+
+
+void write_doc_table_end(file_buffer* fb, int total){
+    fseek(fb->f, 0, SEEK_SET);
+    int L = total;
+    fwrite(&L, sizeof(L),1,fb->f);
+    fclose(fb->f);
+}
+
+bool write_doc_table(file_buffer* fb, doc_entry* de, bool flush){
+    if(flush == true){
+        flush_buffer_to_file(fb);
+        fb->curr = 0;
+    }
+
+    if( de == NULL )
+        return false;
+
+    int url_len = strlen(de->URL);
+    if(url_len <= 0 || url_len >= 1000){
+        printf("Invalid url len%d\n",url_len);
+        url_len = 1;
+    }
+
+    int L = url_len + 3*sizeof(int);
+    if (  L + fb->curr >= fb -> size )
+        flush_buffer_to_file(fb);
+    
+    memcpy(fb -> buffer + fb->curr , &L ,sizeof(int) ); // length of this unit
+    fb->curr  += sizeof(int);
+    memcpy(fb -> buffer + fb->curr , &de->doc_id,sizeof(int) ); // doc_id
+    fb->curr  += sizeof(int);
+    memcpy(fb -> buffer + fb->curr , &de->size_of_doc,sizeof(int) ); //  size of this doc
+    fb->curr  += sizeof(int);
+    memcpy(fb -> buffer + fb->curr , de->URL, url_len ); // URL 
+    fb->curr  += url_len;
+    return true;
 }
 
 
-void print_term_entry(term_entry* te){
+bool next_doc(file_buffer* fb,  doc_entry* de){
+    if(fb->curr >= fb->max)
+        read_batch_to_file_buffer(fb);
+
+    if(fb->max <= 0)
+        return false;
+
+    int total_size = 0;
+    memcpy(&total_size, fb->buffer + fb->curr,sizeof(int));
+    if(fb->curr + total_size >= fb->size){
+        fseek(fb->f, - (fb->size - fb->curr),SEEK_CUR); // if the leftover in the buffer is not 
+        read_batch_to_file_buffer(fb);
+    }
+    int url_len = total_size - 3*sizeof(int);
+    fb->curr += sizeof(int);
+    memcpy(&de->doc_id, fb->buffer + fb->curr, sizeof(int));
+    fb->curr += sizeof(int);
+
+    memcpy(&de->size_of_doc, fb->buffer + fb->curr, sizeof(int));
+    fb->curr += sizeof(int);
+
+    de->URL = (char*) malloc(url_len + 1);
+    memset(de->URL, 0 , url_len + 1);
+    memcpy(de->URL, fb->buffer + fb->curr, url_len);
+    fb->curr += url_len;
+    
+    return true;
+}
+
+
+void print_term_entry(doc_entry** doc_table ,term_entry* te){
     // printf("[%d]\n",te->term_id);
     term_chunk* tc = te->chunk_list_head;
     for(int i = 0; i < te->tc_length; i++){
         int doc_id = tc->doc_id;
-        printf("\tdoc_id[%d]\n", doc_id);
-        position_node* pn = tc->head;
-        for(int j = 0; j < tc->freq; j++){
-            printf("\t\t%d\n", pn->position);
-            pn = pn -> next;
-        }
+        doc_entry* de = doc_table[doc_id];
+        printf("\tFreq:[%d]\t%s\n", tc->freq, de->URL);
         tc = tc -> next;
     }
 }
@@ -296,12 +324,6 @@ bool _free_te(term_entry* te){
       return true;
    term_chunk* ptr = te->chunk_list_head;
    while(ptr){
-      position_node* pos_ptr = ptr->head;
-      while(pos_ptr){
-         position_node* tmp = pos_ptr->next;
-         free(pos_ptr);
-         pos_ptr = tmp;
-      }
       term_chunk* tmp = ptr->next;
       free(ptr);
       ptr = tmp;

@@ -4,12 +4,16 @@
 #include <stdio.h>
 #include "hashmap.h"
 
+// word length limit
+#define WORD_LENGTH_MIN 1
+#define WORD_LENGTH_MAX 15
+
 /* Lexicon model */
 typedef struct{
     int term_length;
     char* term;
-    int info_start;
-    int info_length;
+    long info_start;
+    // int info_length;
 }lexicon;
 
 void write_lexicon_file(FILE* f,lexicon* lex);

@@ -67,7 +67,7 @@ char** read_term_id_map(int* retlen){
    }
    for(int i = 0; i < L; i++){
       if(term_id_map[i] == NULL || term_id_map[i][0]== ' ' || term_id_map[i][0] == 0){
-         printf("Error 100!");
+         printf("Error.\n");
          exit(0);
       }
    }

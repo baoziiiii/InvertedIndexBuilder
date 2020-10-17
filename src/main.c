@@ -6,38 +6,30 @@
 #include <ctype.h>
 #include <stdint.h>
 #include <stddef.h>
+#include <sys/types.h>
+#include <sys/stat.h>
+// #include <dirent.h>
 #include "model.h"
 #include "hashmap.h"
 #include "merge_sort.h"
 #include "termid.h"
 #include "lexicon.h"
 #include "final_build.h"
+#include "query.h"
+#include "sysop.h"
 
 #define IS_LOWER(x)     ((x) <= 'z' && (x) >= 'a')  
 #define IS_UPPER(x)     ((x) <= 'Z' && (x) >= 'A')
 #define IS_ALPHA(x)     (IS_LOWER(x) || IS_UPPER(x))
 
 
-// ./bin/main -b /Users/baowenqiang/GoogleDataSet/msmarco-docs.trec
-// ./bin/main -q word
+// memory limit , not accurate 
+long MEMORY_LIMIT_SETTING = (long)(1000000000);
 
-// valgrind --tool=memcheck --leak-check=yes --log-file=memchk.log --show-reachable=yes --num-callers=20 --track-fds=yes ./bin/main -b /Users/baowenqiang/GoogleDataSet/msmarco-docs.trec
-
-// memory limit for hashmap
-long MAP_MEMORY_LIMIT = (long)(1000000000*0.8);
+#define KEY_MAX_LENGTH (WORD_LENGTH_MAX+1)
 
 // Limit # of intermediate temporary file produced by parsing 
-#define MAX_INTERMEDIATE 100
-
-// buffer limit for read_input 
-
-
-// max word length <= 
-#define WORD_LENGTH_LIMIT 13
-
-
-#define KEY_MAX_LENGTH (WORD_LENGTH_LIMIT+1)
-// const char *stopwords[] = {"i", "me", "my", "myself", "we", "our", "ours", "ourselves", "you", "your", "yours", "yourself", "yourselves", "he", "him", "his", "himself", "she", "her", "hers", "herself", "it", "its", "itself", "they", "them", "their", "theirs", "themselves", "what", "which", "who", "whom", "this", "that", "these", "those", "am", "is", "are", "was", "were", "be", "been", "being", "have", "has", "had", "having", "do", "does", "did", "doing", "a", "an", "the", "and", "but", "if", "or", "because", "as", "until", "while", "of", "at", "by", "for", "with", "about", "against", "between", "into", "through", "during", "before", "after", "above", "below", "to", "from", "up", "down", "in", "out", "on", "off", "over", "under", "again", "further", "then", "once", "here", "there", "when", "where", "why", "how", "all", "any", "both", "each", "few", "more", "most", "other", "some", "such", "no", "nor", "not", "only", "own", "same", "so", "than", "too", "very", "s", "t", "can", "will", "just", "don", "should", "now"};
+#define MAX_INTERMEDIATE 200
 
 
 /*  Hash Map  */
@@ -96,13 +88,13 @@ bool _free_hashmap(const void * value, void * x){
 
 // memory allocated for hashmap entries 
 long memory_allocated = 0; 
+file_buffer* doc_buffer;
+long doc_id = 0;
 
 void process_term(int len, char* term, int doc_id, int pos);
 
 // parse document 
 int process_document(int len, char* buf){
-
-   static int doc_id = 0;
 
    doc_entry *de = (doc_entry *)malloc(sizeof(doc_entry));
    de->doc_id = doc_id;
@@ -112,8 +104,8 @@ int process_document(int len, char* buf){
    de->URL = (char *)malloc(len_url);
    memcpy(de->URL, buf, len_url - 1);
    de->URL[len_url - 1] = 0;
-   de->length = len;
-   write_doc_table(de);
+   de->size_of_doc = len;
+   write_doc_table(doc_buffer,de,false);
    free(de->URL);
    free(de);
 
@@ -122,7 +114,7 @@ int process_document(int len, char* buf){
    char* prev = ptr;
    while(ptr < buf + len){
       if(!IS_ALPHA(*ptr)){
-         if(ptr - prev > 0 && ptr - prev <= WORD_LENGTH_LIMIT && IS_ALPHA(*prev)){
+         if(ptr - prev > 0 && ptr - prev <= WORD_LENGTH_MAX && IS_ALPHA(*prev)){
             int L = ptr - prev + 1;
             char* term = (char *)malloc(L);
             memcpy(term, prev , L - 1);
@@ -143,6 +135,8 @@ int process_document(int len, char* buf){
    doc_id ++;
    return 0;
 }
+
+// const char *stopwords[] = {"i", "me", "my", "myself", "we", "our", "ours", "ourselves", "you", "your", "yours", "yourself", "yourselves", "he", "him", "his", "himself", "she", "her", "hers", "herself", "it", "its", "itself", "they", "them", "their", "theirs", "themselves", "what", "which", "who", "whom", "this", "that", "these", "those", "am", "is", "are", "was", "were", "be", "been", "being", "have", "has", "had", "having", "do", "does", "did", "doing", "a", "an", "the", "and", "but", "if", "or", "because", "as", "until", "while", "of", "at", "by", "for", "with", "about", "against", "between", "into", "through", "during", "before", "after", "above", "below", "to", "from", "up", "down", "in", "out", "on", "off", "over", "under", "again", "further", "then", "once", "here", "there", "when", "where", "why", "how", "all", "any", "both", "each", "few", "more", "most", "other", "some", "such", "no", "nor", "not", "only", "own", "same", "so", "than", "too", "very", "s", "t", "can", "will", "just", "don", "should", "now"};
 
 // int strcicmp(char const *a, char const *b, int n)
 // {
@@ -173,7 +167,7 @@ long term_id_counter = 0;
 void process_term(int len, char* term, int doc_id, int pos){
    map_entry* value = NULL;
    char flag = 1;
-   if(len < 2)
+   if(len < WORD_LENGTH_MIN)
       return;
    // if(blacklist(term, len) == 1)
    //    return;
@@ -209,6 +203,8 @@ void process_term(int len, char* term, int doc_id, int pos){
       te->total_size = sizeof(te->total_size) + sizeof(te->tc_length) + sizeof(te->term_id);
 
       term_chunk* tc = (term_chunk*)malloc(sizeof(term_chunk));
+      tc->next = NULL;
+
       te->chunk_list_head = tc;
       te->chunk_list_tail = tc;
 
@@ -216,14 +212,7 @@ void process_term(int len, char* term, int doc_id, int pos){
       tc->freq = 1;
       te->total_size += sizeof(tc->doc_id) + sizeof(tc->freq);
 
-      tc->head = (position_node*)malloc(sizeof(position_node));
-      tc->head->position = pos;
-      tc->head->next = NULL;
-      tc->tail = tc->head;
-      tc->next = NULL;
-      te->total_size += sizeof(pos);
-
-      memory_allocated += sizeof(term_chunk)+sizeof(term_chunk)+sizeof(position_node);
+      memory_allocated += sizeof(term_entry) + sizeof(term_chunk);
       if(flag){
          hashmap_set(term_map, value);
          free(value);
@@ -233,17 +222,11 @@ void process_term(int len, char* term, int doc_id, int pos){
       term_entry* te = value->te;
       if(te->chunk_list_tail->doc_id == doc_id){
          term_chunk* tc = te->chunk_list_tail;
-         position_node* pn = (position_node*)malloc(sizeof(position_node));
-         pn->position = pos;
-         pn->next = NULL;
-         
          tc->freq ++;
-         tc->tail->next = pn;
-         tc->tail = pn;
-         te->total_size += sizeof(pos);
-         memory_allocated += sizeof(position_node);
+         
       }else{
          term_chunk* tc = (term_chunk*)malloc(sizeof(term_chunk));
+         tc->next = NULL;
 
          te->chunk_list_tail->next = tc;
          te->chunk_list_tail = tc;
@@ -251,13 +234,8 @@ void process_term(int len, char* term, int doc_id, int pos){
 
          tc->doc_id = doc_id;
          tc->freq = 1;
-         tc->head = (position_node*)malloc(sizeof(position_node));
-         tc->head->position = pos;
-         tc->head->next = NULL;
-         tc->tail = tc->head;
-         tc->next = NULL;
-         te->total_size += sizeof(tc->doc_id) + sizeof(tc->freq) + sizeof(pos);
-         memory_allocated += sizeof(position_node) + sizeof(term_chunk);
+         te->total_size += sizeof(tc->doc_id) + sizeof(tc->freq);
+         memory_allocated += + sizeof(term_chunk);
       }
    }
 }
@@ -268,7 +246,7 @@ int num_intermediate_files = 0;
 int iterate_term_map(int flag){
    char filename[1024];
    // hashmap_iterate(term_map,&handle_map_entry,stdout);
-   if(memory_allocated >= MAP_MEMORY_LIMIT || flag == 1){
+   if(memory_allocated >= MEMORY_LIMIT_SETTING || flag == 1){
       snprintf(filename, sizeof(filename), "%s-%d", "tmp/intermediate", num_intermediate_files);
       FILE* f= fopen(filename, "w+");
       file_buffer* fb = init_dynamic_buffer(OUTPUT_BUFFER);
@@ -290,7 +268,6 @@ int iterate_term_map(int flag){
 
 
 long progress = 0; // loaded size from input file
-char input_buffer[INPUT_BUFFER];
 
 // parse
 void parse(FILE* f_in, int percentage){
@@ -303,11 +280,17 @@ void parse(FILE* f_in, int percentage){
    if(percentage < 10){
       sz = sz/10 * percentage;
    }
+
    init_term_id_map();
+   file_buffer* fb_in = init_dynamic_buffer(INPUT_BUFFER);
+   char* input_buffer = fb_in->buffer;
+   fb_in->f = f_in;
+   doc_buffer = init_dynamic_buffer(2000000);
+   doc_buffer->f = fopen("output/doc_table","w+");
+   fseek(doc_buffer->f,4, SEEK_SET);
    
-   input_buffer[INPUT_BUFFER-1] = 0;
    int readed;
-   while((readed=fread(input_buffer,sizeof(char),INPUT_BUFFER-1,f_in)) > 0 && progress < sz) {
+   while((readed=fread(input_buffer,sizeof(char),INPUT_BUFFER-1,fb_in->f)) > 0 && progress < sz) {
       char* ptr = input_buffer;
       bool flag = false;
       while(ptr < input_buffer + INPUT_BUFFER){
@@ -341,6 +324,9 @@ void parse(FILE* f_in, int percentage){
 
    iterate_term_map(1);
    flush_term_to_file(true, term_id_counter);
+   write_doc_table(doc_buffer,NULL,true);
+   write_doc_table_end(doc_buffer, doc_id);
+   free_file_buffer(doc_buffer);
    
    hashmap_scan(term_map,&_free,0);
    hashmap_scan(term_map,&_free_hashmap,0);
@@ -363,37 +349,74 @@ void help(){
    exit(EXIT_SUCCESS);
 }
 
+// not working
+// void cleandir(char* pa){
+//    DIR *d;
+//    struct dirent *dir;
+//    d = opendir(pa);
+//    if (d) {
+//       while ((dir = readdir(d)) != NULL) {
+//            if(dir->d_name[0] != '.')
+//             remove(dir->d_name); 
+//       }
+//       closedir(d);
+//    }
+// }
+
 // build command
 void b(char* filename, int percentage){
+   
    FILE* f_in = fopen(filename, "r");
+   if(f_in == NULL){
+      printf("Fail to open TREC file. Maybe does not exist or with wrong permission.");
+      exit(EXIT_FAILURE);
+   }
+
+   struct stat st = {0};
+   if (stat("output/", &st) == -1) {
+      mkdir("output/", 0700);
+   }
+   if (stat("tmp/", &st) == -1) {
+      mkdir("tmp/", 0700);
+   }
+
+   remove_files("tmp/intermediate");
+   remove_files("tmp/sorted");
+   remove_files("tmp/merged");
+   remove("tmp/merged-0");
+   remove("tmp/tmp_term");
+
    parse(f_in, percentage);
    fclose(f_in);
 
-   merge_sort(num_intermediate_files);
-   printf("Building merged file...\n");
+   merge_sort(MEMORY_LIMIT_SETTING);
+
    build();
    remove("tmp/merged");
    remove("tmp/tmp_term");
-   printf("All done. See output directory.\n\n");
-   help();
+   printf("All success. You can use -q to query words.\n\n");
    exit(EXIT_SUCCESS);
 }
 
 //query command
-void q(char* s){
-   if(read_lexicon_file() == false){
+void q(char** queries, int n){
+   if(init_query_database() == false){
       printf("Please build first!\n");
       exit(EXIT_FAILURE);
    }
-   char* ptr = s;
-   while(*ptr != '\0'){
-      if(IS_UPPER(*ptr))
-         *ptr += 'a' - 'A';
-      ptr++;
+   for(int i = 0; i < n; i++){
+      char* ptr = queries[i];
+      while(*ptr != '\0'){
+         if(IS_UPPER(*ptr))
+            *ptr += 'a' - 'A';
+         ptr++;
+      }
+      printf("%s\n",queries[i]);
+      if(query(queries[i]) == false)
+         printf("\tNo such word in lexicon.\n");
    }
-   if(query(s) == false)
-      printf("No such word in lexicon.\n");
-   close_lexicon_file();
+
+   close_query_database();
    exit(EXIT_SUCCESS);
 }
 
@@ -421,7 +444,9 @@ int main(int argc, char *argv[])
                break;
             case 'q':
                flag = 'q';
-               content = argv[++i];
+               ++i;
+               q(&argv[i], argc - i);
+               exit(EXIT_SUCCESS);
                break;
             case 'p':
                p = atoi(argv[++i]);
@@ -431,14 +456,14 @@ int main(int argc, char *argv[])
                }
                break;
             case 'm':
-               MAP_MEMORY_LIMIT = atoi(argv[++i]);
+               MEMORY_LIMIT_SETTING = atoi(argv[++i]);
 
-               if(MAP_MEMORY_LIMIT < 400 || MAP_MEMORY_LIMIT > 8000){
+               if(MEMORY_LIMIT_SETTING < 400 || MEMORY_LIMIT_SETTING > 8000){
                   printf("must between 400MB and 8000MB\n");
                   exit(0);
                }
-               MAP_MEMORY_LIMIT *= 1024*1024;
-               MAP_MEMORY_LIMIT = (long)(MAP_MEMORY_LIMIT*0.8);
+               MEMORY_LIMIT_SETTING *= 1024*1024;
+               MEMORY_LIMIT_SETTING = (long)(MEMORY_LIMIT_SETTING);
                break;
             
             default:break;
@@ -450,11 +475,9 @@ int main(int argc, char *argv[])
    {
       case 'b': b(content, p);
          break;
-      case 'q': q(content);
       default:
          break;
    }
-
    __exit();
 }
 

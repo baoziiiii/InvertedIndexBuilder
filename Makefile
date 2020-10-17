@@ -29,3 +29,4 @@ clean:
 	-rm -rf $(DEBUG)/*
 	-rm -rf tmp/*
 	-rm -rf output/*
+	-rm -rf build/*
