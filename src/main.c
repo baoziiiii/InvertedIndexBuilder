@@ -18,12 +18,8 @@
 #include "query.h"
 #include "sysop.h"
 
-#define IS_LOWER(x)     ((x) <= 'z' && (x) >= 'a')  
-#define IS_UPPER(x)     ((x) <= 'Z' && (x) >= 'A')
-#define IS_ALPHA(x)     (IS_LOWER(x) || IS_UPPER(x))
 
-
-// memory limit , not accurate 
+// default memory limit 
 long MEMORY_LIMIT_SETTING = (long)(1000000000);
 
 #define KEY_MAX_LENGTH (WORD_LENGTH_MAX+1)
@@ -73,14 +69,6 @@ bool _free(const void * value, void * x){
    return true;
 }
 
-bool _free_hashmap(const void * value, void * x){
-   /* Free all of the values we allocated and remove them from the map */
-   value = hashmap_delete(term_map, ((map_entry*)value)->key_string);
-   // if(value != NULL)
-   //    free(value);
-   return true;
-}
-
 /* End of hash map */
 
 
@@ -94,7 +82,7 @@ long doc_id = 0;
 void process_term(int len, char* term, int doc_id, int pos);
 
 // parse document 
-int process_document(int len, char* buf){
+int process_document(int len, char* buf, long doc_offset){
 
    doc_entry *de = (doc_entry *)malloc(sizeof(doc_entry));
    de->doc_id = doc_id;
@@ -105,6 +93,7 @@ int process_document(int len, char* buf){
    memcpy(de->URL, buf, len_url - 1);
    de->URL[len_url - 1] = 0;
    de->size_of_doc = len;
+   de->offset = doc_offset;
    write_doc_table(doc_buffer,de,false);
    free(de->URL);
    free(de);
@@ -113,8 +102,8 @@ int process_document(int len, char* buf){
    char* start = ptr;
    char* prev = ptr;
    while(ptr < buf + len){
-      if(!IS_ALPHA(*ptr)){
-         if(ptr - prev > 0 && ptr - prev <= WORD_LENGTH_MAX && IS_ALPHA(*prev)){
+      if(!IS_ALPHANUM(*ptr)){
+         if(ptr - prev > 0 && ptr - prev <= WORD_LENGTH_MAX && IS_ALPHANUM(*prev)){
             int L = ptr - prev + 1;
             char* term = (char *)malloc(L);
             memcpy(term, prev , L - 1);
@@ -125,7 +114,7 @@ int process_document(int len, char* buf){
          ptr ++;
          prev = ptr;
       }else{
-         if(!IS_ALPHA(*prev))
+         if(!IS_ALPHANUM(*prev))
             prev = ptr;
          if(IS_UPPER(*ptr))
             *ptr += 'a' - 'A';
@@ -135,31 +124,6 @@ int process_document(int len, char* buf){
    doc_id ++;
    return 0;
 }
-
-// const char *stopwords[] = {"i", "me", "my", "myself", "we", "our", "ours", "ourselves", "you", "your", "yours", "yourself", "yourselves", "he", "him", "his", "himself", "she", "her", "hers", "herself", "it", "its", "itself", "they", "them", "their", "theirs", "themselves", "what", "which", "who", "whom", "this", "that", "these", "those", "am", "is", "are", "was", "were", "be", "been", "being", "have", "has", "had", "having", "do", "does", "did", "doing", "a", "an", "the", "and", "but", "if", "or", "because", "as", "until", "while", "of", "at", "by", "for", "with", "about", "against", "between", "into", "through", "during", "before", "after", "above", "below", "to", "from", "up", "down", "in", "out", "on", "off", "over", "under", "again", "further", "then", "once", "here", "there", "when", "where", "why", "how", "all", "any", "both", "each", "few", "more", "most", "other", "some", "such", "no", "nor", "not", "only", "own", "same", "so", "than", "too", "very", "s", "t", "can", "will", "just", "don", "should", "now"};
-
-// int strcicmp(char const *a, char const *b, int n)
-// {
-//     for (int i = 0; i < n; i++) {
-//         int d = tolower((unsigned char)*a) - tolower((unsigned char)*b);
-//         if (d != 0 || !*a)
-//             return d;
-//          a++;
-//          b++;
-//     }
-//     return 0;
-// }
-
-// int blacklist(char* s, int len){
-//    if(len < 2)
-//       return 1;
-//    for(int i = 0; i < sizeof(stopwords)/sizeof(stopwords[0]); i++){
-//       int min = strlen(stopwords[i]) < len ? strlen(stopwords[i]): len;
-//       if(strcicmp(stopwords[i],s, min) == 0)
-//          return 1;
-//    }
-//    return 0;
-// }
 
 long term_id_counter = 0;
 // counter for term id
@@ -174,6 +138,7 @@ void process_term(int len, char* term, int doc_id, int pos){
    map_entry* key = (map_entry*)malloc(sizeof(map_entry));
    memset(key->key_string, 0, sizeof(key->key_string));
    memcpy(key->key_string ,term, len);
+   
    value = hashmap_get(term_map, key);
    free(key);
    if ( value ==  NULL|| value->te == NULL){
@@ -266,7 +231,6 @@ int iterate_term_map(int flag){
 }
 
 
-
 long progress = 0; // loaded size from input file
 
 // parse
@@ -290,10 +254,11 @@ void parse(FILE* f_in, int percentage){
    fseek(doc_buffer->f,4, SEEK_SET);
    
    int readed;
+
    while((readed=fread(input_buffer,sizeof(char),INPUT_BUFFER-1,fb_in->f)) > 0 && progress < sz) {
       char* ptr = input_buffer;
       bool flag = false;
-      while(ptr < input_buffer + INPUT_BUFFER){
+      while(ptr < input_buffer + readed){
          char* s = strstr(ptr, "<TEXT>\n");
          if( s == NULL )
             break;
@@ -305,7 +270,8 @@ void parse(FILE* f_in, int percentage){
          ptr = e + strlen("</TEXT>\n") + 1;
          if (s[0]!= 'h')
             continue;
-         process_document( e - s - 1, s);
+         long doc_offset = ftell(fb_in->f) - readed + (s - input_buffer);
+         process_document( e - s - 1, s, doc_offset);
          if(iterate_term_map(0) == -1){
             flag = true;
             break;
@@ -315,7 +281,7 @@ void parse(FILE* f_in, int percentage){
       double perc = (double)progress/sz*100;
       if(progress >= sz)
          perc = 100.0;
-      printf("|\t%-9.2lf%%\t|\t%-6ld\t\t|\n",perc,term_id_counter);
+      printf("|\t%-9.2lf%%\t|\t%-6ld\t\t\t|\n",perc,term_id_counter);
       if(flag == true)
          break;
    } 
@@ -324,12 +290,16 @@ void parse(FILE* f_in, int percentage){
 
    iterate_term_map(1);
    flush_term_to_file(true, term_id_counter);
+
+   printf("Total terms: %ld\n", term_id_counter);
+   printf("Total documents: %ld\n", doc_id);
+   
    write_doc_table(doc_buffer,NULL,true);
    write_doc_table_end(doc_buffer, doc_id);
    free_file_buffer(doc_buffer);
    
    hashmap_scan(term_map,&_free,0);
-   hashmap_scan(term_map,&_free_hashmap,0);
+   // hashmap_scan(term_map,&_free_hashmap,0);
    hashmap_free(term_map);
 
 }
@@ -340,35 +310,21 @@ void parse(FILE* f_in, int percentage){
 /*  CLI  */
 
 char *help_message = "-b <TREC file>  build inverted index table, lexicon and doc table from input file(without <>). Output to output/... \n"
-             "-q <word> query a word(without <>).\n"
+             "-q [TREC file] Query mode. Set TREC file if you want to show snippet. \n"
              "-p <1~10> Load 10 percent to 100 percent of data, mapping to 1 to 10 \n"
              "-m <400~8000> Memory Limit 400MB to 8GB, mapping to 400 to 8000\n"; 
 
 void help(){
-   printf("%s",help_message);
+   printf("%s\n",help_message);
    exit(EXIT_SUCCESS);
 }
-
-// not working
-// void cleandir(char* pa){
-//    DIR *d;
-//    struct dirent *dir;
-//    d = opendir(pa);
-//    if (d) {
-//       while ((dir = readdir(d)) != NULL) {
-//            if(dir->d_name[0] != '.')
-//             remove(dir->d_name); 
-//       }
-//       closedir(d);
-//    }
-// }
 
 // build command
 void b(char* filename, int percentage){
    
    FILE* f_in = fopen(filename, "r");
    if(f_in == NULL){
-      printf("Fail to open TREC file. Maybe does not exist or with wrong permission.");
+      printf("Fail to open TREC file. Maybe does not exist or with wrong permission.\n");
       exit(EXIT_FAILURE);
    }
 
@@ -399,25 +355,76 @@ void b(char* filename, int percentage){
 }
 
 //query command
-void q(char** queries, int n){
+void q(char* doc_path){
+
    if(init_query_database() == false){
       printf("Please build first!\n");
       exit(EXIT_FAILURE);
    }
-   for(int i = 0; i < n; i++){
-      char* ptr = queries[i];
-      while(*ptr != '\0'){
-         if(IS_UPPER(*ptr))
-            *ptr += 'a' - 'A';
-         ptr++;
-      }
-      printf("%s\n",queries[i]);
-      if(query(queries[i]) == false)
-         printf("\tNo such word in lexicon.\n");
+
+   int mode = -1;
+
+   int limit = -1;
+
+   while( limit <= 0){
+      printf("\nEnter result limit: \n");
+      scanf("%d",&limit);
+   }
+   getchar();
+   while( mode != CONJUNCTIVE_MODE && mode != DISJUNCTIVE_MODE){
+      printf("Choose mode: [%d] Conjunctive mode. [%d] Disjunctive mode.\n", CONJUNCTIVE_MODE, DISJUNCTIVE_MODE);
+      scanf("%d", &mode);
    }
 
+   size_t len = 1024*1024;
+   char* stdin_buf = (char*) malloc(len);
+   int read;
+   printf("\nEnter your query:\n");
+   
+   getchar();
+
+   // FILE* test = fopen("test2.txt","r");
+   while((read = getline(&stdin_buf, &len, stdin)) > 0){
+      char** queries = (char**) malloc(read*sizeof(char*));
+      int i = 0;
+      int word_cnt = 0;
+
+      while( i < read ){
+         if(IS_ALPHANUM(stdin_buf[i])){
+            int s = i;
+            while(IS_ALPHANUM(stdin_buf[i])){
+               if(IS_UPPER(stdin_buf[i]))
+                  stdin_buf[i]+= 'a' - 'A';
+               i++;
+            }
+            int L = i - s + 1;
+            queries[word_cnt] = (char*) malloc(L);
+            memset(queries[word_cnt], 0, L);
+            memcpy(queries[word_cnt], stdin_buf + s, L - 1);
+            word_cnt++;
+         }
+         i++;
+      }
+
+      if(word_cnt == 0){
+         free(queries);
+         break;
+      }
+      
+      query(queries, word_cnt, limit, mode, doc_path);
+
+      for(i = 0; i < word_cnt; i++){
+         free(queries[i]);
+      }
+      free(queries);
+
+      // break;
+      printf("\nEnter your query:\n");
+
+   };
+   free(stdin_buf);
    close_query_database();
-   exit(EXIT_SUCCESS);
+   exit(0);
 }
 
 void __exit(){
@@ -430,25 +437,35 @@ int main(int argc, char *argv[])
    if(argc <= 1 || strlen(argv[1]) <= 1 || argv[1][0] != '-')
       help();
    int p = 10;
+   // int K = 10;
    char flag = 0;
    char* content;
+   char* doc_path = NULL;
+
    for(int i=1;i < argc;i++){  
 		if(argv[i][0]=='-'){
 			switch(argv[i][1]){
-            if(i+1 >=argc)
-               __exit();
             case 'b': 
-               printf("|\t%-9s\t|\t%-2s\t|\n","Loaded","total words");
+               if(i+1 >=argc)
+                  __exit();
+               printf("|\t%-9s\t|\t%-2s\t|\n","Progress","Identified Terms");
                flag = 'b';
                content = argv[++i];
                break;
             case 'q':
                flag = 'q';
-               ++i;
-               q(&argv[i], argc - i);
-               exit(EXIT_SUCCESS);
+               if( ++i < argc && argv[i][0] != '-')
+                  doc_path = argv[i];
+               
+               // if(++i < argc){
+               //    K = atoi(argv[i]);
+               //    if(K <= 0)
+               //       __exit();
+               // }
                break;
             case 'p':
+               if(i+1 >=argc)
+                  __exit();
                p = atoi(argv[++i]);
                if(p < 1 || p > 10){
                   printf("must between 1 and 10\n");
@@ -456,8 +473,9 @@ int main(int argc, char *argv[])
                }
                break;
             case 'm':
+               if(i+1 >=argc)
+                  __exit();
                MEMORY_LIMIT_SETTING = atoi(argv[++i]);
-
                if(MEMORY_LIMIT_SETTING < 400 || MEMORY_LIMIT_SETTING > 8000){
                   printf("must between 400MB and 8000MB\n");
                   exit(0);
@@ -474,6 +492,8 @@ int main(int argc, char *argv[])
    switch (flag)
    {
       case 'b': b(content, p);
+         break;
+      case 'q': q(doc_path);
          break;
       default:
          break;

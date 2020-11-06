@@ -41,9 +41,7 @@ bool read_next_term(file_buffer *fb, lexicon_el* ll){
 }
 
 
-
-
-bool read_lexicon_file(struct hashmap* query_map){
+bool read_lexicon_file(struct hashmap* lexicon_map){
     FILE* f_lex = fopen("output/lexicon","r");
     file_buffer* fb = init_dynamic_buffer(DYNAMIC_BUFFER);
     fb -> f = f_lex;
@@ -56,7 +54,8 @@ bool read_lexicon_file(struct hashmap* query_map){
 
     while(read_next_term(fb,ll) == true){
         ll->key_string[WORD_LENGTH_MAX - 1] = 0;
-        hashmap_set(query_map, ll);
+        hashmap_set(lexicon_map, ll);
+        free(ll);
         ll =(lexicon_el*) malloc(sizeof(lexicon_el));
         memset(ll->key_string,0,WORD_LENGTH_MAX);
     }
@@ -67,13 +66,11 @@ bool read_lexicon_file(struct hashmap* query_map){
 }
 
 
-
-
 void write_lexicon_file(FILE* f_lex, lexicon* lex){
 
     fwrite(&lex->term_length,sizeof(int),1,f_lex);
     fwrite(lex->term,1,lex->term_length,f_lex);
-    fwrite(&lex->info_start,sizeof(long),1,f_lex);
+    fwrite(&lex->offset,sizeof(long),1,f_lex);
     // fwrite(&lex->info_length,sizeof(int),1,f_lex);
 }
 

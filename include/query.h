@@ -8,8 +8,11 @@ typedef struct
    long offset;
 } lexicon_el;
 
+#define CONJUNCTIVE_MODE 0
+#define DISJUNCTIVE_MODE 1
+
 bool init_query_database();
-bool query(char* s);
+bool query(char** s, int N, int limit, int MODE, char* doc_path);
 void close_query_database();
 
 #endif

@@ -7,9 +7,11 @@ INCLUDE := include
 LIB     := lib
 LIBRARIES   := 
 EXECUTABLE  := main
+# TEST := test
 DEBUG := debug
 
 all:$(EXECUTABLE) $(BIN)/$(EXECUTABLE) $(DEBUG)/$(EXECUTABLE)
+
 
 run: clean all
 	./$(BIN)/$(EXECUTABLE)
@@ -19,6 +21,9 @@ $(EXECUTABLE): $(SRC)/*.c
 
 $(BIN)/$(EXECUTABLE): $(SRC)/*.c 
 	$(CXX) $(CFLAGS) -I$(INCLUDE) -L$(LIB) $^ -o $@ $(LIBRARIES)
+
+# $(BIN)/test: $(TEST)/*.c 
+# 	$(CXX) $(CFLAGS) -I$(INCLUDE) -L$(LIB) $^ -o $@ $(LIBRARIES)
 
 $(DEBUG)/$(EXECUTABLE): $(SRC)/*.c 
 	$(CXX) $(CFLAGS) -g -I$(INCLUDE) -L$(LIB) $^ -o $@ $(LIBRARIES)

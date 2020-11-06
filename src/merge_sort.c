@@ -33,12 +33,13 @@ int merge_sort(long memory_limit){
 
    read_term_id_map(&term_id_map_size);
 
-   printf("Sorting...\n");
    r = check_number_of_files(s1);
    if( r == -1 ){
       printf("No file found for: %s\n", s1);
       exit(EXIT_FAILURE);
    }
+   
+   printf("Sorting...\n");
    sort(r);
    // remove_files(s1);
 
@@ -52,7 +53,6 @@ int merge_sort(long memory_limit){
    merge(r, r, memory_limit);
    rename("tmp/merged-0","tmp/merged");
    remove_files(s2);
-
 
    free_term_id_map(term_id_map, term_id_map_size);
    return 1;

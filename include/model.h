@@ -11,6 +11,7 @@ typedef struct DE{
     int doc_id; 
     int size_of_doc;
     char* URL;
+    long offset;
 }doc_entry;
 
 /* See lexicon.h for lexicon model */
@@ -35,6 +36,23 @@ typedef struct TE{
 }term_entry;
 
 
+typedef struct iv{
+    FILE* f;
+    int length;
+    long block_ldoc_table_offset;
+    long block_size_table_offset;
+    long block_offset; 
+    term_chunk* block_cache;
+    term_chunk* block_cache_ptr;
+    int block_curr_ldoc;
+    int block_curr_sdoc;
+    int block_curr_cnt;
+    int curr_doc;
+    int curr_freq;
+    int maxdocID;
+}IV;
+
+
 /*  Dynamic Buffer  */
 typedef struct{
     FILE* f;
@@ -48,11 +66,15 @@ typedef struct{
 #define INPUT_BUFFER 100000000
 #define OUTPUT_BUFFER 100000000
 
+#define IS_LOWER(x)     ((x) <= 'z' && (x) >= 'a')  
+#define IS_UPPER(x)     ((x) <= 'Z' && (x) >= 'A')
+#define IS_ALPHA(x)     (IS_LOWER(x) || IS_UPPER(x))
+#define IS_ALPHANUM(x)  (IS_ALPHA(x) || (x) >= '0' && (x) <= '9' )
 
 /* Implemented in model_support.c */
 
 /*  model operations  */
-bool merge_same_term(term_entry* dst, term_entry*src);
+bool merge_same_term(term_entry* dst, term_entry*src); 
 void print_term_entry(doc_entry** doc_table ,term_entry* te);
 bool _free_te(term_entry* te);
 
@@ -60,8 +82,12 @@ bool _free_te(term_entry* te);
 bool write_doc_table(file_buffer* fb, doc_entry* de, bool flush);
 bool next_doc(file_buffer* fb,  doc_entry* de);
 void write_doc_table_end(file_buffer* fb, int total);
-void read_inverted_list(FILE* f, int offset, int length, term_entry* te);
+
+/*  inverted list op  */
+#define BLOCK_SIZE 128
+term_chunk* read_block_to_cache(IV* lp);
 long write_to_final_inverted_list(file_buffer* fb, term_entry*te, bool flush);
+
 
 /*  Operate the term model by dynamic buffer  */
 file_buffer* init_dynamic_buffer(int size);

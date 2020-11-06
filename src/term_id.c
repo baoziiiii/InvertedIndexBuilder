@@ -37,6 +37,7 @@ void write_term_id_map(int term_id, char* term, int len, int total){
    int check_len = sizeof(int) + sizeof(int) + len;
    if ( check_len + cur >= TERM_BUFFER_OUTPUT )
         flush_term_to_file(false, total);
+
    memcpy(t_buffer + cur, &term_id ,sizeof(int));
    cur += sizeof(int);
    memcpy(t_buffer + cur, &len, sizeof(int));

@@ -56,7 +56,7 @@ int sort(int num_intermediate_files){
         snprintf(filename, sizeof(filename), "%s-%d", "tmp/intermediate", i);
         int readed = read_intermediate(term_id_map, sort_buffer, INTERMEDIATE_SIZE, filename);
         qsort(sort_buffer, readed, sizeof(term_entry*), Comparator);
-
+    
         file_buffer* fb = init_dynamic_buffer(OUTPUT_BUFFER);
         fb -> f = f;
         for(int j = 0; j < readed; j++)

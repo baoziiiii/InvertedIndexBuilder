@@ -5,7 +5,7 @@
 #include "model.h"
 #include "hashmap.h"
 
-/*  global term<-->term_id map. Used in sort, merge and final build phases */
+/*  global term<-->term_id map(./tmp/tmp_term) Generated in parse phase, used in sort, merge phases for intermediate process.*/
 extern char** term_id_map;
 
 void init_term_id_map();

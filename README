@@ -32,7 +32,7 @@ $ ./main -b msmarco-docs.trec -m 2000 # build and set memory limit to 2G (not ac
 $ ./main -b msmarco-docs.trec -p 1 # build upon only load 10% of data if you like
 $ ./main -q american people # must after successful built
 ```
-
+./main -b ~/GoogleDataSet/msmarco-docs.trec -p 1
 **Output**:
 
 Temporary files will be created under tmp/ during program and **deleted** **automatically** during building process.
@@ -201,7 +201,7 @@ Total Size{4}, (Unit Length{4}, Doc_ID{4}, Doc_Size{4}, URL{determined by Unit L
    /*  query.h  */
    /*  Hash Map  */
    // read from lexicon to a map in memory , used for query
-   struct hashmap * query_map;
+   struct hashmap * lexicon_map;
    
    typedef struct
    {
@@ -217,7 +217,7 @@ Total Size{4}, (Unit Length{4}, Doc_ID{4}, Doc_Size{4}, URL{determined by Unit L
    doc_entry** doc_table; //doc_entry array
    int doc_table_L = 0;
    
-   bool read_doc_file(struct hashmap* query_map){
+   bool read_doc_file(struct hashmap* lexicon_map){
        FILE* f_doc = fopen("output/doc_table","r");
        file_buffer* fb = init_dynamic_buffer(1000000);
        fb -> f = f_doc;

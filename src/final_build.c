@@ -31,9 +31,10 @@ void build(){
     while(next_record_from_file_buffer(fb_i, te) == true){
         lexicon* lex = (lexicon*) malloc(sizeof(lexicon));
         lex->term = _term_id_map[te->term_id];
+
         lex->term_length = strlen(lex->term);
         
-        lex->info_start = write_to_final_inverted_list(fb_o, te, false);
+        lex->offset = write_to_final_inverted_list(fb_o, te, false);
         // lex->info_length = te->total_size - sizeof(te->term_id) - sizeof(te->total_size);
 
         write_lexicon_file(f_lex, lex);

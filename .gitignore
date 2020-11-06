@@ -4,3 +4,5 @@ tmp/*
 output/*
 debug/*
 build/*
+debug/*
+main.dsYM/*

@@ -53,7 +53,7 @@ int merge(char N_input, int _maxDegree, long memory_limit)
 
         /* open output file (output is handled by the buffer ioBufs[degree]) */
         sprintf(filename, "%s-%d", "tmp/merged", numFiles);
-        file_buffer* fb_o = init_dynamic_buffer((memory_limit/N_input)*2);
+        file_buffer* fb_o = init_dynamic_buffer((memory_limit/N_input));
         fb_o -> f = fopen(filename, "w");
         ioBufs[degree].fb = fb_o;
 
@@ -116,8 +116,8 @@ void heapify(int i){
   {
     /* find minimum key value of current node and its two children */
 
-    if (((i<<1) <= heap.size) && strcmp(KEY(i<<1) , KEY(i)))  s = i<<1;
-    if (((i<<1)+1 <= heap.size) && strcmp(KEY((i<<1)+1) , KEY(s)))  s = (i<<1)+1;
+    if (((i<<1) <= heap.size) && strcmp(KEY(i<<1) , KEY(i)) < 0)  s = i<<1;
+    if (((i<<1)+1 <= heap.size) && strcmp(KEY((i<<1)+1) , KEY(s))< 0)  s = (i<<1)+1;
     
     /* if current is minimum, then done. Else swap with child and go down */
     if (s == i)  break;
