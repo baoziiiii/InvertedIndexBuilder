@@ -60,8 +60,6 @@ bool next_record_from_file_buffer(file_buffer* fb, term_entry* te){
     for(int i = 0; i < doc_len; i++){
         int doc_id = 0;
         memcpy(&doc_id, fb->buffer + fb->curr, sizeof(int));
-        if(doc_id <= prev_doc_id)
-            printf("???\n");
         prev_doc_id = doc_id;
         fb->curr += sizeof(int);
         term_chunk* tc = (term_chunk*)malloc(sizeof(term_chunk));
@@ -354,6 +352,28 @@ bool merge_same_term(term_entry* te1, term_entry* te2){
     dst->total_size += src->total_size - sizeof(src->tc_length) - sizeof(src->term_id) - sizeof(src->total_size);
     return true;
 }
+
+
+// bool merge_same_term(term_entry* dst, term_entry* src){
+//     if( dst == NULL || src == NULL || dst->term_id != src->term_id)
+//         return false;
+
+//     term_chunk* src_tc = src->chunk_list_head;
+
+//     for(int i = 0; i < src->tc_length; i++){
+//         term_chunk* tc = (term_chunk*)malloc(sizeof(term_chunk));
+//         tc->freq = src_tc->freq;
+//         tc->doc_id = src_tc->doc_id;
+//         tc->next = NULL;
+        
+//         dst->chunk_list_tail->next = tc;
+//         dst->chunk_list_tail = tc;
+//         src_tc = src_tc -> next;
+//     }
+//     dst->tc_length += src->tc_length;
+//     dst->total_size += src->total_size - sizeof(src->tc_length) - sizeof(src->term_id) - sizeof(src->total_size);
+//     return true;
+// }
 
 
 // void write_doc_table(doc_entry *de){

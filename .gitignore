@@ -6,3 +6,5 @@ debug/*
 build/*
 debug/*
 main.dsYM/*
+.DS_Store
+main.dSYM
